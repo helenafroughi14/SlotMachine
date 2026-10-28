@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import "./App.css";
 import Reels from "./Reels";
 import {
@@ -13,6 +13,7 @@ import {
 } from "./gameLogic";
 
 const symbols = Object.keys(SYMBOLS_COUNT);
+const BALANCE_KEY = "SlotMachine:balance";
 
 function InputComponent({
   label,
@@ -21,7 +22,7 @@ function InputComponent({
   onInputKeyDown,
   disabledCondition,
   onInputClick,
-  buttonText
+  buttonText,
 }) {
   return (
     <label>
@@ -49,7 +50,14 @@ export default function App() {
   );
 
   const [currentDeposit, setCurrentDeposit] = useState("");
-  const [currentBalance, setCurrentBalance] = useState(0);
+  const [currentBalance, setCurrentBalance] = useState(() => {
+    const loadBalance = parseFloat(localStorage.getItem(BALANCE_KEY)); //even if its null this will always return Nan.
+
+    if (isNaN(loadBalance)) {
+      return 0;
+    }
+    return loadBalance;
+  });
 
   const [currentBet, setCurrentBet] = useState("");
   const [finalBet, setFinalBet] = useState(0);
@@ -57,11 +65,24 @@ export default function App() {
   const [currentLines, setCurrentLines] = useState("");
   const [finalLines, setFinalLines] = useState(0);
 
-  const [lastWin, setLastWin] = useState("");
+  const [winAmount, setWinAmount] = useState(0);
 
   const depositInt = parseFloat(currentDeposit);
   const betLinesInt = parseFloat(currentLines);
   const betInt = parseFloat(currentBet);
+
+  const winTimer = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      clearTimeout(winTimer.current);
+    };
+  }, []);
+
+  useEffect(() => {
+    //
+    localStorage.setItem(BALANCE_KEY, JSON.stringify(currentBalance));
+  }, [currentBalance]);
 
   function handleDeposit() {
     if (isNaN(depositInt) || depositInt <= 0) {
@@ -101,8 +122,15 @@ export default function App() {
     const nextReels = spin();
     const winnings = getWinnings(nextReels, finalBet, finalLines);
 
+    clearTimeout(winTimer.current);
+    setWinAmount(winnings);
+
+    if (winnings > 0) {
+      winTimer.current = setTimeout(() => setWinAmount(0), 2000);
+    }
+
     setCurrentReels(nextReels);
-    setLastWin(winnings);
+    setWinAmount(winnings);
     setCurrentBalance((prev) => prev - totalBet + winnings);
   }
 
@@ -124,35 +152,34 @@ export default function App() {
       />
       <div>Balance:{currentBalance}</div>
 
-      <InputComponent 
+      <InputComponent
         label="Bet Lines: "
         value={currentLines}
         onInputChange={(e) => setCurrentLines(e.target.value)}
-        onInputKeyDown={(e) => {if (e.key === "Enter") handleBetLines();
-
+        onInputKeyDown={(e) => {
+          if (e.key === "Enter") handleBetLines();
         }}
         disabledCondition={invalidBetLines(betLinesInt)}
         onInputClick={handleBetLines}
         buttonText={"Final Lines"}
-        >
-        </InputComponent>
-        <p>Lines Total: {finalLines}</p>
-        <p>Bet Total: {totalBet}</p>
-        {totalBet>currentBalance && (<p>Bet Total exceeds your balance. Lower your bet or lines.</p>)}
+      ></InputComponent>
+      <p>Lines Total: {finalLines}</p>
+      <p>Bet Total: {totalBet}</p>
+      {totalBet > currentBalance && (
+        <p>Bet Total exceeds your balance. Lower your bet or lines.</p>
+      )}
 
       <InputComponent
         label={"Bet amount: "}
         value={currentBet}
         onInputChange={(e) => setCurrentBet(e.target.value)}
         onInputKeyDown={(e) => {
-          if (e.key ==="Enter") handleBet();
+          if (e.key === "Enter") handleBet();
         }}
-
-        disabledCondition={invalidBetAmount(currentBalance,betInt,finalLines)}
+        disabledCondition={invalidBetAmount(currentBalance, betInt, finalLines)}
         onInputClick={handleBet}
         buttonText={"Place Bet"}
-        >
-      </InputComponent>
+      ></InputComponent>
 
       <div className="board-row">
         <Reels reels={currentReels} />
@@ -161,7 +188,7 @@ export default function App() {
         </button>
       </div>
 
-      <div>{lastWin > 0 && "You've won " + lastWin + "!"}</div>
+      <div>{winAmount > 0 && `You have won: ${winAmount}!`}</div>
     </>
   );
 }
